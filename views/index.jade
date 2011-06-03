@@ -1,0 +1,18 @@
+!!! 5
+html(lang="en")
+	head
+		title= title
+		script(type="text/javascript", src="http://ajax.googleapis.com/ajax/libs/jquery/1.6.1/jquery.min.js")
+		script(type="text/javascript", src="/auth/client")
+	body
+		h1= title
+		p Welcome to #{title}
+
+		- if (name)
+			p #{name}
+		- else
+			button#facebutt Facebook
+
+		div.details they go here!
+
+		script(type="text/javascript", src="/javascripts/base.js")
