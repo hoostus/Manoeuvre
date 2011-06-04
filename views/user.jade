@@ -1,0 +1,19 @@
+h1= user.first_name
+a(href="/logout")
+	button Logout
+form(action="/lobby", method="POST")
+	button New Game
+
+h2 My Turn
+div#my-turn
+
+h2 Games I am playing
+div#games-playing
+
+h2 Games I've created that haven't started yet
+div#my-waiting
+
+h2 Games looking for a player
+div#all-waiting
+
+script(type="text/javascript", src="/javascripts/user.js")

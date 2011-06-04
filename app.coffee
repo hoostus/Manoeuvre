@@ -1,4 +1,5 @@
 express = require('express')
+Step = require('step')
 
 app = express.createServer()
 module.exports = app
@@ -22,13 +23,118 @@ app.configure 'development', ->
 app.configure 'production', ->
 	app.use express.errorHandler()
 
+db = do ->
+	Db = require('mongodb').Db
+	Connection = require('mongodb').Connection
+	Server = require('mongodb').Server
+	BSON = require('mongodb').BSONNative
+
+	host = (process.env['MONGO_NODE_DRIVER_HOST'] || "localhost")
+	port = (process.env['MONGO_NODE_DRIVER_PORT'] || Connection.DEFAULT_PORT)
+	new Db('manoeuvre', new Server(host, port, {}), {native_parser: true})
+
 app.get '/', (request, response) ->
-	response.render 'index',
-		title: 'Hello'
-		name: request.getAuthDetails()?.user?.name
-		user: JSON.stringify(request.getAuthDetails().user)
+	if request.getAuthDetails()?.user?
+		response.redirect('user')
+	else
+		response.render 'index',
+			title: 'Oh noes'
+
+update_user = (fb_user) ->
+	Step ->
+		db.open(this)
+	, (err) ->
+		db.collection("users", this)
+	, (err, collection) ->
+		fb_user._id = fb_user.id
+		collection.save(fb_user, safe: true, this)
+	, (err, records) ->
+		if err?
+			console.log("update_user error " + err)
+
+app.redirect 'user', (request, response) ->
+	'/user/' + request.getAuthDetails()?.user?.id
+
+app.get '/user', (request, response) ->
+	if request.getAuthDetails()?.user?
+		response.redirect('user')
+	else
+		response.redirect('home')
 
 app.get '/user/:id', (request, response) ->
-	response.send 'user' + request.params.id
+	if not request.getAuthDetails()?.user?
+		response.redirect('home')
+
+	Step ->
+		db open this
+	, (err) ->
+		db.collection "users", this
+	, (err, collection) ->
+		collection.findOne _id: request.getAuthDetails().user.id, this
+	, (err, document) ->
+		user = request.getAuthDetails().user
+		update_user user
+		response.render 'user',
+			user: user
+
+app.get '/user/:id/waiting', (request, response) ->
+	Step ->
+		db.open this
+	, (err) ->
+		db.collection "games", this
+	, (err, collection) ->
+		cursor = collection.find active: request.params.id
+		cursor.toArray this
+	, (err, waiting) ->
+		response.send JSON.stringify(waiting)
+
+app.get '/user/:id/playing', (request, response) ->
+	Step ->
+		db.open this
+	, (err) ->
+		db.collection "games", this
+	, (err, collection) ->
+		cursor = collection.find players: request.params.id
+		cursor.toArray this
+	, (err, playing) ->
+		response.send JSON.stringify(playing)
+
+app.get '/user/:id/lobbies', (request, response) ->
+	Step ->
+		db.open this
+	, (err) ->
+		db.collection "lobbies", this
+	, (err, lobbies) ->
+		cursor = lobbies.find creator: request.params.id
+		cursor.toArray this
+	, (err, lobbies) ->
+		response.send JSON.stringify(lobbies)
+
+app.get '/lobby', (request, response) ->
+	Step ->
+		db.open this
+	, (err) ->
+		db.collection "lobbies", this
+	, (err, lobbies) ->
+		cursor = lobbies.find creator: {$ne: request.getAuthDetails()?.user?.id}
+		cursor.toArray this
+	, (err, lobbies) ->
+		response.send JSON.stringify(lobbies)
+
+app.post '/lobby', (request, response) ->
+	if not request.getAuthDetails()?.user?
+		response.redirect('home')
+
+	Step ->
+		db.open this
+	, (err) ->
+		db.collection "lobbies", this
+	, (err, lobbies) ->
+		lobbies.insert
+			creator: request.getAuthDetails().user.id
+			created: new Date()
+		, safe: true, (err, records) ->
+			console.log("Added new lobby as: " + records[0]._id)
+			response.redirect("user")
 
 app.listen 3000
