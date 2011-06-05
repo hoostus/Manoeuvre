@@ -44,9 +44,14 @@ update_user = (fb_user) ->
 	Step ->
 		db.open(this)
 	, (err) ->
+		if err?
+			console.log "db open err: " + err
 		db.collection("users", this)
 	, (err, collection) ->
+		if err?
+			console.log "collection err: " + err
 		fb_user._id = fb_user.id
+		console.log JSON.stringify(fb_user)
 		collection.save(fb_user, safe: true, this)
 	, (err, records) ->
 		if err?
@@ -63,7 +68,8 @@ app.get '/user', (request, response) ->
 
 app.get '/user/:id', (request, response) ->
 	if not request.getAuthDetails()?.user?
-		response.redirect('home')
+		response.redirect("home")
+		return
 
 	Step ->
 		db open this
@@ -116,25 +122,43 @@ app.get '/lobby', (request, response) ->
 	, (err) ->
 		db.collection "lobbies", this
 	, (err, lobbies) ->
-		cursor = lobbies.find creator: {$ne: request.getAuthDetails()?.user?.id}
+		cursor = lobbies.find creator: {$ne: request.getAuthDetails()?.user?.id}, { sort: 'created' }
 		cursor.toArray this
 	, (err, lobbies) ->
-		response.send JSON.stringify(lobbies)
+		response.render 'all-lobbies', lobbies: lobbies
 
 app.post '/lobby', (request, response) ->
 	if not request.getAuthDetails()?.user?
-		response.redirect('home')
+		throw new Error("unauthorized")
 
 	Step ->
 		db.open this
 	, (err) ->
 		db.collection "lobbies", this
 	, (err, lobbies) ->
+		creator = request.getAuthDetails().user
 		lobbies.insert
-			creator: request.getAuthDetails().user.id
+			creator_id: creator.id
+			creator_name: creator.name
 			created: new Date()
+			started: false
 		, safe: true, (err, records) ->
 			console.log("Added new lobby as: " + records[0]._id)
 			response.redirect("user")
+
+app.post '/lobby/:id', (request, response) ->
+	if not request.getAuthDetails()?.user?
+		throw new Error("unauthorized")
+
+	Step ->
+		db.open this
+	, (err) ->
+		db.collection "lobbies", this
+	, (err, lobbies) ->
+		lobbies.findOne _id: request.params.id, this
+		this.lobbies = lobbies
+	, (err, lobby) ->
+		if lobby.creator == request.getAuthDetails().user.id
+			throw new Error("cannot join your own game")
 
 app.listen 3000
